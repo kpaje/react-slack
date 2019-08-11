@@ -1,46 +1,47 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const cors = require("cors");
-const Chatkit = require("@pusher/chatkit-server");
+require("dotenv").config();
+var express = require("express");
+var exphbs = require("express-handlebars");
 
-const app = express();
+var db = require("./models");
 
-const chatkit = new Chatkit.default({
-	instanceLocator: process.env.INSTANCELOCATOR,
-	key: process.env.KEY
+var app = express();
+var PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
+app.use(express.static("public"));
+
+// Handlebars
+app.engine(
+	"handlebars",
+	exphbs({
+		defaultLayout: "main"
+	})
+);
+app.set("view engine", "handlebars");
+
+// Routes
+require("./routes/apiRoutes")(app);
+require("./routes/htmlRoutes")(app);
+
+var syncOptions = { force: false };
+
+// If running a test, set syncOptions.force to true
+// clearing the `testdb`
+if (process.env.NODE_ENV === "test") {
+	syncOptions.force = true;
+}
+
+// Starting the server, syncing our models ------------------------------------/
+db.sequelize.sync(syncOptions).then(function() {
+	app.listen(PORT, function() {
+		console.log(
+			"==> 🌎  Listening on port %s. Visit http://localhost:%s/ in your browser.",
+			PORT,
+			PORT
+		);
+	});
 });
 
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
-app.use(cors());
-
-app.post("/users", (req, res) => {
-	const { username } = req.body;
-	chatkit
-		.createUser({
-			id: username,
-			name: username
-		})
-		.then(() => res.sendStatus(201))
-		.catch(error => {
-			if (error.error === "services/chatkit/user_already_exists") {
-				res.sendStatus(200);
-			} else {
-				res.status(error.status).json(error);
-			}
-		});
-});
-
-app.post("/authenticate", (req, res) => {
-	const authData = chatkit.authenticate({ userId: req.query.user_id });
-	res.status(authData.status).send(authData.body);
-});
-
-const PORT = 3001;
-app.listen(PORT, err => {
-	if (err) {
-		console.error(err);
-	} else {
-		console.log(`Running on port ${PORT}`);
-	}
-});
+module.exports = app;
